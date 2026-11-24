@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+appdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+if [ -z "${SHARK_DRIVER_DATA_ROOT:-}" ]; then
+    if [ -n "${APPIMAGE:-}" ]; then
+        SHARK_DRIVER_DATA_ROOT=$(CDPATH= cd -- "$(dirname -- "$APPIMAGE")" && pwd -P)
+    else
+        SHARK_DRIVER_DATA_ROOT=$(pwd -P)
+    fi
+fi
+export SHARK_DRIVER_DATA_ROOT
+exec "$appdir/usr/bin/shark-driver" "$@"

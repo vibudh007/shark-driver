@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>local.sharkdriver.SharkDriver</id>
+  <name>Shark Driver</name>
+  <summary>Configure your Attack Shark mouse</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <description>
+    <p>Adjust pointer sensitivity, button assignments, lighting and other settings on supported Attack Shark mice. Save profiles and create or record macros.</p>
+  </description>
+  <launchable type="desktop-id">local.sharkdriver.SharkDriver.desktop</launchable>
+  <provides><binary>shark-driver</binary></provides>
+  <content_rating type="oars-1.1"/>
+  <releases><release version="0.1.0" date="2026-11-24"/></releases>
+</component>

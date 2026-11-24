@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+SHARK_DRIVER_DATA_ROOT="${SHARK_DRIVER_DATA_ROOT:-${XDG_DATA_HOME:?}/shark-driver}"
+umask 077
+mkdir -p -- "$SHARK_DRIVER_DATA_ROOT"
+export SHARK_DRIVER_DATA_ROOT
+exec /app/libexec/shark-driver "$@"

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Shark Driver
+Comment=Configure your Attack Shark mouse
+Exec=shark-driver
+Icon=local.sharkdriver.SharkDriver
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=Mouse;Pointer;Macros;
+StartupNotify=true

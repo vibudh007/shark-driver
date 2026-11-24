@@ -1,0 +1,18 @@
+[package]
+name = "shark-driver-cli"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Shark Driver command-line tools for supported Attack Shark mice"
+license = "GPL-3.0-only"
+publish = false
+
+[lib]
+name = "shark_driver"
+
+[dependencies]
+dbus = "0.9"
+libc = "0.2"
+
+[profile.release]
+strip = "symbols"

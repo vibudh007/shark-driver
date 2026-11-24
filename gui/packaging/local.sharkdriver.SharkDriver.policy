@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD polkit Policy Configuration 1.0//EN"
+ "https://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
+<policyconfig>
+  <vendor>Shark Driver</vendor>
+  <icon_name>local.sharkdriver.SharkDriver</icon_name>
+  <action id="local.sharkdriver.SharkDriver.session">
+    <description>Manage your mouse with Shark Driver</description>
+    <message>Allow Shark Driver to manage your mouse until the app closes.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/shark-driver-cli</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">desktop-session</annotate>
+  </action>
+  <action id="local.sharkdriver.SharkDriver.device">
+    <description>Access the selected mouse with Shark Driver</description>
+    <message>Administrator authorization is required to access this mouse.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/shark-driver-cli</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">desktop-device</annotate>
+  </action>
+  <action id="local.sharkdriver.SharkDriver.record">
+    <description>Record from selected input devices</description>
+    <message>Administrator authorization is required to read these input devices.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/shark-driver-cli</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">desktop-record</annotate>
+  </action>
+  <action id="local.sharkdriver.SharkDriver.recovery">
+    <description>Recover the selected mouse with Shark Driver</description>
+    <message>Administrator authorization is required to access the selected USB recovery device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/shark-driver-cli</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">desktop-recovery</annotate>
+  </action>
+</policyconfig>
