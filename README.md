@@ -1,7 +1,5 @@
 # Shark Driver
 
-![Shark Driver shark silhouette](design/logo/shark-silhouette.svg)
-
 Shark Driver is an independent Linux configuration tool for Attack Shark mice. Use the GTK4 desktop app for everyday adjustments or the Rust CLI for scripts and diagnostics. The app detects supported mice connected by USB, 2.4 GHz receiver, or Bluetooth and shows the controls it can use on the selected connection.
 
 ## Features
