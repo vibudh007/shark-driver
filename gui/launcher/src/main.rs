@@ -92,7 +92,8 @@ fn launch() -> io::Result<ExitCode> {
             .arg(payload.0.join("app.py"));
         command
             .env("SHARK_DRIVER_ROOT", &root)
-            .env("SHARK_DRIVER_CLI", &cli);
+            .env("SHARK_DRIVER_CLI", &cli)
+            .env("SHARK_DRIVER_ELEVATED_CLI", &cli);
         command
     };
     let result = command.args(args).current_dir(&root).status()?;

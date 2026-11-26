@@ -14,7 +14,6 @@ ROOT = Path(os.environ.get("SHARK_DRIVER_ROOT", Path(__file__).resolve().parents
 CLI = Path(os.environ.get("SHARK_DRIVER_CLI", ROOT / "target" / "release" / "shark-driver-cli"))
 LIBRARY = ROOT / ".r1"
 FLATPAK = Path("/.flatpak-info").is_file()
-SYSTEM_HELPERS = (Path("/usr/bin/shark-driver-cli"), Path("/usr/bin/attack-shark-r1"))
 ERROR_PREFIXES = ("shark-driver-cli: ", "attack-shark-r1: ")
 SESSION = None
 MODES = ("off", "static", "breathing", "neon", "color-breathing", "static-dpi", "breathing-dpi")
@@ -62,32 +61,34 @@ def session_ready():
 
 
 def host_command(*arguments):
-    """Use the host only for the fixed system helper and Polkit commands."""
+    """Use the host Polkit agent when the app runs inside Flatpak."""
     if FLATPAK:
         return ["/usr/bin/flatpak-spawn", "--host", "--directory=/", *arguments]
     return list(arguments)
 
 
 def session_supported():
-    helper = trusted_install()
-    if helper is None:
+    """Return whether this packaged launch has its scoped CLI worker available."""
+    helper_name = os.environ.get("SHARK_DRIVER_ELEVATED_CLI")
+    if not helper_name:
         return False
+    helper = Path(helper_name)
     try:
-        result = subprocess.run(host_command(str(helper), "desktop-session-version"),
-                                capture_output=True, timeout=2, check=False)
-        return result.stdout == b"1\n"
-    except (OSError, subprocess.TimeoutExpired):
+        info = helper.stat()
+        return stat.S_ISREG(info.st_mode) and os.access(helper, os.X_OK)
+    except OSError:
         return False
 
 
 def start_session():
-    """Authenticate once and hold the privileged worker's lifetime pipe open."""
+    """Ask Polkit once and hold the scoped privileged worker until app shutdown."""
     global SESSION
     if session_ready():
         return
-    helper = trusted_install()
-    if helper is None or not session_supported():
-        raise CommandError("Install the updated administrator helper to enable session access.", 1)
+    helper_name = os.environ.get("SHARK_DRIVER_ELEVATED_CLI")
+    if not helper_name or not session_supported():
+        raise CommandError("The app could not prepare its device access session.", 1)
+    helper = Path(helper_name)
     token = secrets.token_hex(32)
     process = subprocess.Popen(
         host_command("/usr/bin/pkexec", "--disable-internal-agent", str(helper), "desktop-session", token),
@@ -107,18 +108,15 @@ def stop_session():
         _, process = SESSION
         SESSION = None
         process.stdin.close()
+        process.wait()
 
 
 def command_line(arguments, target=(), elevated=False):
     """Build an argument vector for the selected execution scope."""
     if elevated:
-        helper = trusted_install()
-        if helper is None:
-            raise CommandError("Administrator access requires the packaged app.", 1)
-        if SESSION is not None and not session_ready():
-            raise CommandError("Administrator access ended. Reopen the app to authorize again.", 1)
-        argv = ([project_file(CLI), "desktop-session-connect", SESSION[0]] if session_ready() else
-                host_command("/usr/bin/pkexec", "--disable-internal-agent", str(helper)))
+        if not session_ready():
+            raise CommandError("Allow device access when Shark Driver starts, then reopen the app.", 1)
+        argv = [project_file(CLI), "desktop-session-connect", SESSION[0]]
         if arguments[0] in ("desktop-record", "desktop-recovery") and not target:
             argv.extend(arguments)
         else:
@@ -391,29 +389,6 @@ def scoped_action(args, target, elevated):
     with open(project_file(destination), "x", encoding="utf-8") as output:
         output.write(data)
     return "Backup saved."
-
-
-def trusted_install():
-    """Find the preferred root-owned helper or the existing compatible installation."""
-    for candidate in SYSTEM_HELPERS:
-        if trusted_helper(candidate):
-            return candidate
-    return None
-
-
-def trusted_helper(candidate):
-    """Accept only a root-owned executable at the exact fixed system path."""
-    if FLATPAK:
-        candidate = Path("/run/host") / candidate.relative_to("/")
-    try:
-        path = candidate.resolve(strict=True)
-        if path != candidate:
-            return False
-        info = path.stat()
-        return (info.st_uid == 0 and stat.S_ISREG(info.st_mode)
-                and info.st_mode & 0o022 == 0 and os.access(path, os.X_OK))
-    except OSError:
-        return False
 
 
 def durable_backup(path, data):

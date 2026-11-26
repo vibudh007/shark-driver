@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 cd -- "$root"
 id=local.sharkdriver.SharkDriver
-version=0.1.0
+version=0.1.1
 runtime=org.gnome.Platform
 branch=49
 asset_dir="$root/gui/packaging"
@@ -82,6 +82,7 @@ install -Dm644 LICENSE "$build/files/share/licenses/shark-driver/LICENSE"
 install -Dm644 THIRD_PARTY_NOTICES "$build/files/share/licenses/shark-driver/THIRD_PARTY_NOTICES"
 flatpak build-finish --command=shark-driver --socket=wayland --socket=fallback-x11 \
     --share=ipc --share=network --device=all --filesystem=host-os:ro \
+    --filesystem=xdg-data/themes:ro \
     --system-talk-name=org.bluez --talk-name=org.freedesktop.Flatpak "$build"
 flatpak build-export "$repo" "$build" stable
 flatpak build-bundle "$repo" "$stage/$flatpak_name" "$id" stable \

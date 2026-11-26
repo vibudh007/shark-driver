@@ -17,8 +17,8 @@ Shark Driver is an independent Linux configuration tool for Attack Shark mice. U
 Download the x86-64 AppImage from [Releases](https://github.com/vibudh007/shark-driver/releases/latest). It uses your system's GTK 4.12 or newer, Python 3.10 or newer with PyGObject, glibc 2.39 or newer, and libdbus.
 
 ```sh
-chmod +x Shark-Driver-0.1.0-x86_64.AppImage
-./Shark-Driver-0.1.0-x86_64.AppImage
+chmod +x Shark-Driver-0.1.1-x86_64.AppImage
+./Shark-Driver-0.1.1-x86_64.AppImage
 ```
 
 If the FUSE mount fails, use extraction mode.
@@ -35,7 +35,7 @@ Download the x86-64 Flatpak bundle. Flatpak gets the GNOME 49 runtime from Flath
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./Shark-Driver-0.1.0-x86_64.flatpak
+flatpak install --user ./Shark-Driver-0.1.1-x86_64.flatpak
 flatpak run local.sharkdriver.SharkDriver
 ```
 
@@ -64,7 +64,7 @@ Restart the app after installing the helper. It can then request authorization f
 - Model detection covers 18 models from the vendor's Windows utility. Feature support depends on model, firmware and connection. Fixture coverage is broader than physical testing.
 - On the tested R1 firmware, Bluetooth can report battery through BlueZ but cannot read back settings or macros. Use USB or 2.4 GHz for configuration on that firmware. Eight other models currently have Bluetooth discovery and battery only.
 - The audited R1 firmware has no verified way to restore an erased macro slot byte for byte. Persistent wired macro writes are blocked on the affected revision. High-rate FA65 receiver profile, button and macro operations also remain incomplete.
-- The packaged app passed Wayland and X11 smoke tests and simulated settings checks over all three transports. The package tests did not exercise live mouse writes or a real Polkit prompt. Font and theme rendering can vary between the host GTK stack and the Flatpak runtime.
+- The packaged app passed Wayland and X11 smoke tests and simulated settings checks over all three transports. The package tests did not exercise live mouse writes or a real Polkit prompt. Flatpak reads the host GTK theme name and loads available GTK4 theme CSS from read-only host theme paths, falling back to Adwaita Dark if the theme is missing or cannot be parsed. Host and runtime GTK versions can still differ.
 
 ## Build from source
 

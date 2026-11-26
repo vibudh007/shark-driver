@@ -89,6 +89,9 @@ fn serve(mut stream: UnixStream, uid: u32) -> io::Result<()> {
         // interactive operation cannot keep waiting for confirmation.
         if unsafe { libc::poll(&mut lifetime, 1, 10) } > 0 {
             let _ = stream.shutdown(Shutdown::Both);
+            if child.try_wait()?.is_none() {
+                let _ = child.kill();
+            }
             child.wait()?;
             return Ok(());
         }

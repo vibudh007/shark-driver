@@ -1,4 +1,14 @@
 """Shark Driver GTK4 desktop entry point."""
+import os
+import sys
+
+# A GTK application must run in the logged-in user's graphical session. The
+# privileged device helper is launched separately through Polkit.
+if __name__ == "__main__" and os.geteuid() == 0:
+    print("Run Shark Driver as your desktop user, without sudo. Mouse access is authorized separately.",
+          file=sys.stderr, flush=True)
+    raise SystemExit(1)
+
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -82,10 +92,161 @@ def color_value(widget):
 
 
 def configure_branding(display):
+    if display is None:
+        return False
     theme = Gtk.IconTheme.get_for_display(display)
     theme.add_search_path(str(Path(__file__).with_name("icons")))
     Gtk.Window.set_default_icon_name(APP_ID)
     return theme.has_icon(APP_ID)
+
+
+def apply_portal_color_scheme(settings, value, fallback_dark):
+    """Apply the host preference, or keep Adwaita Dark when no theme exists."""
+    if value == 0:
+        if fallback_dark:
+            settings.set_property("gtk-application-prefer-dark-theme", True)
+        else:
+            settings.reset_property("gtk-application-prefer-dark-theme")
+    elif value in (1, 2):
+        settings.set_property("gtk-application-prefer-dark-theme", value == 1)
+
+
+def portal_string_value(value):
+    """Unwrap a portal variant and return its string payload, if valid."""
+    for _ in range(4):
+        if value.get_type_string() != "v":
+            break
+        value = value.get_variant()
+    if value.get_type_string() != "s":
+        return None
+    return value.get_string()
+
+
+def portal_color_scheme_value(value):
+    """Unwrap the portal's nested variants and return a valid uint32 scheme."""
+    for _ in range(4):
+        if value.get_type_string() != "v":
+            break
+        value = value.get_variant()
+    if value.get_type_string() != "u":
+        return None
+    return value.get_uint32()
+
+
+def gtk4_theme_available(theme_name):
+    """Check runtime and read-only host data roots for a GTK4 theme sheet."""
+    if not theme_name or theme_name in (".", "..") or Path(theme_name).name != theme_name:
+        return False
+    data_roots = [Path(path) for path in GLib.get_system_data_dirs()]
+    host_user_data = os.environ.get("HOST_XDG_DATA_HOME")
+    if host_user_data:
+        data_roots.append(Path(host_user_data))
+    data_roots.extend((Path("/run/host/usr/local/share"), Path("/run/host/usr/share"),
+                       Path("/run/host/user-share")))
+    theme_dirs = (root / "themes" / theme_name / "gtk-4.0" for root in data_roots)
+    for theme_dir in theme_dirs:
+        sheets = [theme_dir / name for name in ("gtk.css", "gtk-dark.css")
+                  if (theme_dir / name).is_file()]
+        if sheets and all(gtk_theme_css_parses(sheet) for sheet in sheets):
+            return True
+    return False
+
+
+def gtk_theme_css_parses(path):
+    """Reject a theme stylesheet that the bundled GTK cannot parse."""
+    provider = Gtk.CssProvider()
+    errors = []
+    provider.connect("parsing-error", lambda _provider, _section, error: errors.append(error))
+    try:
+        provider.load_from_path(str(path))
+    except GLib.Error:
+        return False
+    return not errors
+
+
+def apply_host_gtk_theme(settings, theme_name):
+    """Load the host's GTK4 theme when its stylesheet is visible in the sandbox."""
+    if not gtk4_theme_available(theme_name):
+        settings.set_property("gtk-theme-name", "Adwaita")
+        settings.set_property("gtk-application-prefer-dark-theme", True)
+        return False
+    settings.set_property("gtk-theme-name", theme_name)
+    return True
+
+
+def portal_color_scheme_changed(_connection, _sender, _path, _interface, _signal, parameters, application):
+    """Apply host theme and color changes emitted by the Settings portal."""
+    try:
+        namespace = parameters.get_child_value(0).get_string()
+        key = parameters.get_child_value(1).get_string()
+        variant = parameters.get_child_value(2)
+        if namespace == "org.freedesktop.appearance" and key == "color-scheme":
+            value = portal_color_scheme_value(variant)
+            if value in (0, 1, 2):
+                application.portal_color_scheme = value
+                apply_portal_color_scheme(application.theme_settings, value,
+                                          not application.host_theme_available)
+        elif namespace == "org.gnome.desktop.interface" and key == "gtk-theme":
+            theme_name = portal_string_value(variant)
+            if theme_name:
+                application.host_theme_available = apply_host_gtk_theme(application.theme_settings, theme_name)
+                if application.portal_color_scheme is not None:
+                    apply_portal_color_scheme(application.theme_settings, application.portal_color_scheme,
+                                              not application.host_theme_available)
+    except (GLib.Error, AttributeError, TypeError):
+        return
+
+
+def read_portal_setting(connection, result, request):
+    """Read the current host preference, tolerating desktops without this portal."""
+    application, setting = request
+    try:
+        reply = connection.call_finish(result)
+        variant = reply.get_child_value(0)
+        value = portal_color_scheme_value(variant) if setting == "color-scheme" else portal_string_value(variant)
+    except (GLib.Error, AttributeError, TypeError):
+        return
+    if setting == "color-scheme" and value in (0, 1, 2):
+        application.portal_color_scheme = value
+        apply_portal_color_scheme(application.theme_settings, value,
+                                  not application.host_theme_available)
+    elif setting == "gtk-theme" and value:
+        application.host_theme_available = apply_host_gtk_theme(application.theme_settings, value)
+        if application.portal_color_scheme is not None:
+            apply_portal_color_scheme(application.theme_settings, application.portal_color_scheme,
+                                      not application.host_theme_available)
+
+
+def follow_flatpak_appearance(application, display):
+    """Subscribe to the host light/dark preference when running in Flatpak."""
+    if not backend.FLATPAK:
+        return
+    try:
+        connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    except GLib.Error:
+        return
+    settings = Gtk.Settings.get_for_display(display)
+    application.theme_settings = settings
+    application.portal_color_scheme = None
+    application.host_theme_available = apply_host_gtk_theme(
+        settings, settings.get_property("gtk-theme-name"))
+    application.theme_bus = connection
+    application.theme_subscription = connection.signal_subscribe(
+        "org.freedesktop.portal.Desktop", "org.freedesktop.portal.Settings",
+        "SettingChanged", "/org/freedesktop/portal/desktop", None,
+        Gio.DBusSignalFlags.NONE, portal_color_scheme_changed, application,
+    )
+    for namespace, key, setting in (
+        ("org.freedesktop.appearance", "color-scheme", "color-scheme"),
+        ("org.gnome.desktop.interface", "gtk-theme", "gtk-theme"),
+    ):
+        connection.call(
+            "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+            "org.freedesktop.portal.Settings", "Read",
+            GLib.Variant("(ss)", (namespace, key)),
+            GLib.VariantType.new("(v)"), Gio.DBusCallFlags.NONE, 1000, None,
+            read_portal_setting, (application, setting),
+        )
 
 
 class Window(Gtk.ApplicationWindow):
@@ -113,6 +274,7 @@ class Window(Gtk.ApplicationWindow):
         self.action_names = ()
         self.active_page = "Overview"
         self.notice_timer = 0
+        self.access_setup_notice_shown = False
         self.library_reload = None
         self.elevated_target = ()
         self.connect("close-request", self.close_window)
@@ -263,11 +425,20 @@ class Window(Gtk.ApplicationWindow):
             except Exception as error:
                 if failed:
                     failed()
-                self.message(backend.describe(error))
-                if (self.selected_device().configurable and self.target()[:1] == ("--connection",)
-                        and backend.device_open_denied(error)):
+                denied = (self.selected_device().configurable and self.target()[:1] == ("--connection",)
+                          and backend.device_open_denied(error))
+                authorization_available = backend.session_supported() if denied else False
+                blocked_without_authorization = denied and not authorization_available
+                if blocked_without_authorization:
+                    if not self.access_setup_notice_shown:
+                        self.access_setup_notice_shown = True
+                        self.message("The mouse is detected, but access is not approved. Choose Allow access to authorize this app session.")
+                else:
+                    self.message(backend.describe(error))
+                if denied and authorization_available:
                     self.access_button.set_visible(True)
-                print(error, flush=True)
+                if not blocked_without_authorization:
+                    print(error, flush=True)
             else:
                 self.message("")
                 complete(result)
@@ -346,6 +517,7 @@ class Window(Gtk.ApplicationWindow):
 
     def activate_device(self):
         self.access_button.set_visible(False)
+        self.access_setup_notice_shown = False
         target = self.target()
         self.elevated_target = target if target[:1] == ("--connection",) and backend.session_ready() else ()
         self.snapshot = None
@@ -595,7 +767,7 @@ class Window(Gtk.ApplicationWindow):
         value = label("")
 
         def command(args):
-            elevated = device.target == self.elevated_target and backend.trusted_install() == backend.SYSTEM_HELPERS[0]
+            elevated = device.target == self.elevated_target and backend.session_ready()
             return backend.run(["polling", *args], device.target, elevated=elevated)
 
         def display(reply):
@@ -629,7 +801,7 @@ class Window(Gtk.ApplicationWindow):
 
         def run(args, complete):
             def work():
-                elevated = device.target == self.elevated_target and backend.trusted_install() == backend.SYSTEM_HELPERS[0]
+                elevated = device.target == self.elevated_target and backend.session_ready()
                 return backend.dpi_stages(backend.run(["dpi", *args], device.target, elevated=elevated))
             self.submit(work, complete, failed=lambda: display({}))
 
@@ -680,7 +852,7 @@ class Window(Gtk.ApplicationWindow):
             self.submit(work, display)
 
         def command(args):
-            elevated = device.target == self.elevated_target and backend.trusted_install() == backend.SYSTEM_HELPERS[0]
+            elevated = device.target == self.elevated_target and backend.session_ready()
             return backend.run(["button", *args], device.target, elevated=elevated)
 
         def edit(name, action):
@@ -1363,8 +1535,16 @@ def main():
     GLib.set_prgname(APP_ID)
     app = Gtk.Application(application_id=APP_ID, flags=Gio.ApplicationFlags.NON_UNIQUE)
     app.smoke_passed = False
+    app.display_failed = False
     def activate(application):
         display = Gdk.Display.get_default()
+        if display is None:
+            print("Shark Driver could not connect to your graphical session. Start it from your desktop session.",
+                  file=sys.stderr, flush=True)
+            application.display_failed = True
+            application.quit()
+            return
+        follow_flatpak_appearance(application, display)
         has_logo = configure_branding(display)
         if args.smoke_test and not has_logo:
             print("Shark Driver logo is missing.", flush=True)
@@ -1375,11 +1555,16 @@ def main():
         Gtk.StyleContext.add_provider_for_display(display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         Window(application, args.smoke_test).present()
     app.connect("activate", activate)
-    app.connect("shutdown", lambda *_: backend.stop_session())
+    def shutdown(application):
+        if getattr(application, "theme_subscription", 0):
+            application.theme_bus.signal_unsubscribe(application.theme_subscription)
+        backend.stop_session()
+
+    app.connect("shutdown", shutdown)
     if args.smoke_test:
         GLib.timeout_add_seconds(15, lambda: (app.quit(), False)[1])
     status = app.run([])
-    return 1 if args.smoke_test and not app.smoke_passed else status
+    return 1 if app.display_failed or (args.smoke_test and not app.smoke_passed) else status
 
 
 if __name__ == "__main__":

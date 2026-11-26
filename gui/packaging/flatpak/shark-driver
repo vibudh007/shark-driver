@@ -5,4 +5,10 @@ SHARK_DRIVER_DATA_ROOT="${SHARK_DRIVER_DATA_ROOT:-${XDG_DATA_HOME:?}/shark-drive
 umask 077
 mkdir -p -- "$SHARK_DRIVER_DATA_ROOT"
 export SHARK_DRIVER_DATA_ROOT
+# Search host theme assets exposed read-only by Flatpak after runtime assets.
+XDG_DATA_DIRS="${XDG_DATA_DIRS:-/app/share:/usr/share}:/run/host/user-share:/run/host/usr/local/share:/run/host/usr/share"
+if [ -n "${HOST_XDG_DATA_HOME:-}" ]; then
+    XDG_DATA_DIRS="$XDG_DATA_DIRS:$HOST_XDG_DATA_HOME"
+fi
+export XDG_DATA_DIRS
 exec /app/libexec/shark-driver "$@"

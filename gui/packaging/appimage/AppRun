@@ -2,12 +2,18 @@
 set -eu
 
 appdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
-if [ -z "${SHARK_DRIVER_DATA_ROOT:-}" ]; then
-    if [ -n "${APPIMAGE:-}" ]; then
-        SHARK_DRIVER_DATA_ROOT=$(CDPATH= cd -- "$(dirname -- "$APPIMAGE")" && pwd -P)
-    else
-        SHARK_DRIVER_DATA_ROOT=$(pwd -P)
-    fi
+if [ "$(id -u)" -eq 0 ] && [ "${1:-}" != "--cli" ]; then
+    printf '%s\n' 'Run Shark Driver as your desktop user, without sudo. Mouse access is authorized separately.' >&2
+    exit 1
 fi
+if [ -z "${SHARK_DRIVER_DATA_ROOT:-}" ]; then
+    data_home=${XDG_DATA_HOME:-${HOME:?HOME must be set}/.local/share}
+    SHARK_DRIVER_DATA_ROOT=$data_home/shark-driver
+fi
+umask 077
+mkdir -p -- "$SHARK_DRIVER_DATA_ROOT"
 export SHARK_DRIVER_DATA_ROOT
+# The app is GTK-only. Avoid leaking unrelated host Qt plugin paths into
+# subprocesses launched from environments that export Qt-specific variables.
+unset QT_QPA_PLATFORM QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QT_QPA_FONTDIR
 exec "$appdir/usr/bin/shark-driver" "$@"
